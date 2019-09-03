@@ -69,6 +69,7 @@ NSString *const SECOND = @"second";
 NSString *const NOTIFICATION_ID = @"NotificationId";
 NSString *const PAYLOAD = @"payload";
 NSString *const NOTIFICATION_LAUNCHED_APP = @"notificationLaunchedApp";
+NSString *const NOTIFICATION_CLASSIFIED = @"dexterous.com/flutter/local_notifications";
 
 
 typedef NS_ENUM(NSInteger, RepeatInterval) {
