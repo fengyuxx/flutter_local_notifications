@@ -17,8 +17,7 @@ enum ReceiveNotificationType {
 /// Signature of callback passed to [initialize]. Callback triggered when user taps on a notification
 typedef SelectNotificationCallback = Future<dynamic> Function(String payload);
 
-typedef NotificationHandler(Map<String, dynamic> notification,
-    ReceiveNotificationType notificationType);
+typedef NotificationHandler(Map<String, dynamic> notification);
 
 // Signature of the callback that is triggered when a notification is shown whilst the app is in the foreground. Applicable to iOS versions < 10 only
 typedef DidReceiveLocalNotificationCallback = Future<dynamic> Function(
@@ -262,20 +261,11 @@ class FlutterLocalNotificationsPlugin {
   Future<void> _handleMethod(MethodCall call) {
     switch (call.method) {
       case 'notificationOnLaunch':
-        return _onLaunchReceiveNotification(
-          call.arguments['notification'],
-          ReceiveNotificationType.values[call.arguments['type']],
-        );
+        return _onLaunchReceiveNotification(call.arguments['notification']);
       case 'notificationOnResume':
-        return _onResumeReceiveNotification(
-          call.arguments['notification'],
-          ReceiveNotificationType.values[call.arguments['type']],
-        );
+        return _onResumeReceiveNotification(call.arguments['notification']);
       case 'notificationOnActive':
-        return _onActiveReceiveNotification(
-          call.arguments['notification'],
-          ReceiveNotificationType.values[call.arguments['type']],
-        );
+        return _onActiveReceiveNotification(call.arguments['notification']);
       default:
         return Future.error('method not defined');
     }

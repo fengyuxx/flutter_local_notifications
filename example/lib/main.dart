@@ -689,14 +689,11 @@ class _HomePageState extends State<HomePage> {
     return value.toString().padLeft(2, '0');
   }
 
-  _onLaunchReceiveNotification(
-      Map<String, dynamic> map, ReceiveNotificationType tpe) async {}
+  _onLaunchReceiveNotification(Map<String, dynamic> map) async {}
 
-  _onResumeReceiveNotification(
-      Map<String, dynamic> map, ReceiveNotificationType tpe) async {}
+  _onResumeReceiveNotification(Map<String, dynamic> map) async {}
 
-  _onActiveReceiveNotification(
-      Map<String, dynamic> map, ReceiveNotificationType tpe) async {}
+  _onActiveReceiveNotification(Map<String, dynamic> map) async {}
 
   Future<void> onDidReceiveLocalNotification(
       int id, String title, String body, String payload) async {
