@@ -559,7 +559,7 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult result))completionHandl
         if([presentBadgeValue boolValue]) presentationOptions |= UNNotificationPresentationOptionBadge;
 
     }else{
-        UNNotificationPresentationOptions presentationOptions = UNNotificationPresentationOptionBadge | UNNotificationPresentationOptionSound | UNNotificationPresentationOptionAlert;
+        presentationOptions = UNNotificationPresentationOptionBadge | UNNotificationPresentationOptionSound | UNNotificationPresentationOptionAlert;
     }
     completionHandler(presentationOptions);
 }
