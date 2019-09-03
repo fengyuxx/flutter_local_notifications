@@ -2,6 +2,10 @@
 #import "NotificationTime.h"
 #import "NotificationDetails.h"
 
+typedef NS_ENUM(NSInteger, NotificationType){
+    iOSLocal = 1,
+    iOSRemote = 2,
+};
 
 
 @implementation FlutterLocalNotificationsPlugin{
@@ -10,28 +14,32 @@
     bool playSound;
     bool updateBadge;
     bool initialized;
-    bool launchingAppFromNotification;
     NSUserDefaults *persistentState;
     NSObject<FlutterPluginRegistrar> *_registrar;
-    NSString *launchPayload;
-    UILocalNotification *launchNotification;
+    NSDictionary *launchNotification;
+    BOOL resumingFromBackground;
+    NSString *deviceToken;
 }
 
-NSString *const INITIALIZE_METHOD = @"initialize";
-NSString *const INITIALIZED_HEADLESS_SERVICE_METHOD = @"initializedHeadlessService";
-NSString *const SHOW_METHOD = @"show";
-NSString *const SCHEDULE_METHOD = @"schedule";
-NSString *const PERIODICALLY_SHOW_METHOD = @"periodicallyShow";
-NSString *const SHOW_DAILY_AT_TIME_METHOD = @"showDailyAtTime";
-NSString *const SHOW_WEEKLY_AT_DAY_AND_TIME_METHOD = @"showWeeklyAtDayAndTime";
-NSString *const CANCEL_METHOD = @"cancel";
-NSString *const CANCEL_ALL_METHOD = @"cancelAll";
-NSString *const PENDING_NOTIFICATIONS_REQUESTS_METHOD = @"pendingNotificationRequests";
-NSString *const GET_NOTIFICATION_APP_LAUNCH_DETAILS_METHOD = @"getNotificationAppLaunchDetails";
+
 NSString *const CHANNEL = @"dexterous.com/flutter/local_notifications";
 NSString *const CALLBACK_CHANNEL = @"dexterous.com/flutter/local_notifications_background";
-NSString *const ON_NOTIFICATION_METHOD = @"onNotification";
-NSString *const DID_RECEIVE_LOCAL_NOTIFICATION = @"didReceiveLocalNotification";
+
+NSString *const METHOD_INITIALIZE = @"initialize";
+NSString *const METHOD_INITIALIZED_HEADLESS_SERVICE = @"initializedHeadlessService";
+NSString *const METHOD_SHOW = @"show";
+NSString *const METHOD_SCHEDULE = @"schedule";
+NSString *const METHOD_PERIODICALLY_SHOW = @"periodicallyShow";
+NSString *const METHOD_SHOW_DAILY_AT_TIME = @"showDailyAtTime";
+NSString *const METHOD_SHOW_WEEKLY_AT_DAY_AND_TIME = @"showWeeklyAtDayAndTime";
+NSString *const METHOD_CANCEL = @"cancel";
+NSString *const METHOD_CANCEL_ALL = @"cancelAll";
+NSString *const METHOD_PENDING_NOTIFICATIONS_REQUESTS = @"pendingNotificationRequests";
+NSString *const METHOD_GET_NOTIFICATION_APP_LAUNCH_DETAILS = @"getNotificationAppLaunchDetails";
+
+NSString *const CALLBACK_ON_LAUNCH_RECEIVE_NOTIFICATION = @"notificationOnLaunch";
+NSString *const CALLBACK_ON_RESUME_RECEIVE_NOTIFICATION = @"notificationOnResume";
+NSString *const CALLBACK_ON_ACTIVE_RECEIVE_NOTIFICATION = @"notificationOnActive";
 
 NSString *const DAY = @"day";
 
@@ -72,9 +80,9 @@ typedef NS_ENUM(NSInteger, RepeatInterval) {
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
     FlutterMethodChannel *channel = [FlutterMethodChannel
-               methodChannelWithName:CHANNEL
-               binaryMessenger:[registrar messenger]];
-   
+                                     methodChannelWithName:CHANNEL
+                                     binaryMessenger:[registrar messenger]];
+    
     FlutterLocalNotificationsPlugin* instance = [[FlutterLocalNotificationsPlugin alloc] initWithChannel:channel registrar:registrar];
     [registrar addApplicationDelegate:instance];
     [registrar addMethodCallDelegate:instance channel:channel];
@@ -92,38 +100,33 @@ typedef NS_ENUM(NSInteger, RepeatInterval) {
         _registrar = registrar;
         persistentState = [NSUserDefaults standardUserDefaults];
     }
-
+    
     return self;
 }
 
-- (void)pendingNotificationRequests:(FlutterResult _Nonnull)result {
-    if(@available(iOS 10.0, *)) {
-        UNUserNotificationCenter *center =  [UNUserNotificationCenter currentNotificationCenter];
-        [center getPendingNotificationRequestsWithCompletionHandler:^(NSArray<UNNotificationRequest *> * _Nonnull requests) {
-            NSMutableArray<NSDictionary<NSString *, NSObject *> *> *pendingNotificationRequests = [[NSMutableArray alloc] initWithCapacity:[requests count]];
-            for (UNNotificationRequest *request in requests) {
-                [pendingNotificationRequests addObject:@{
-                                   @"id" : request.content.userInfo[NOTIFICATION_ID],
-                                   @"title" : request.content.title,
-                                   @"body" : request.content.body,
-                                   @"payload": request.content.userInfo[PAYLOAD]
-                                   }];
-            }
-            result(pendingNotificationRequests);
-        }];
-    } else {
-        NSArray *notifications = [UIApplication sharedApplication].scheduledLocalNotifications;
-        NSMutableArray<NSDictionary<NSString *, NSObject *> *> *pendingNotificationRequests = [[NSMutableArray alloc] initWithCapacity:[notifications count]];
-        for( int i = 0; i < [notifications count]; i++) {
-            UILocalNotification* localNotification = [notifications objectAtIndex:i];
-            [pendingNotificationRequests addObject:@{
-                                                     @"id" : localNotification.userInfo[NOTIFICATION_ID],
-                                                     @"title" : localNotification.userInfo[TITLE],
-                                                     @"body" : localNotification.alertBody,
-                                                     @"payload": localNotification.userInfo[PAYLOAD]
-                                                     }];
-        }
-        result(pendingNotificationRequests);
+
+- (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
+    if([METHOD_INITIALIZE isEqualToString:call.method]) {
+        [self initialize:call result:result];
+    } else if ([METHOD_SHOW isEqualToString:call.method] ||
+               [METHOD_SCHEDULE isEqualToString:call.method] ||
+               [METHOD_PERIODICALLY_SHOW isEqualToString:call.method] ||
+               [METHOD_SHOW_DAILY_AT_TIME isEqualToString:call.method] ||
+               [METHOD_SHOW_WEEKLY_AT_DAY_AND_TIME isEqualToString:call.method]) {
+        [self showNotification:call result:result];
+    } else if([METHOD_CANCEL isEqualToString:call.method]) {
+        [self cancelNotification:call result:result];
+    } else if([METHOD_CANCEL_ALL isEqualToString:call.method]) {
+        [self cancelAllNotifications:result];
+    } else if([METHOD_GET_NOTIFICATION_APP_LAUNCH_DETAILS isEqualToString:call.method]) {
+        result(launchNotification);
+    } else if([METHOD_INITIALIZED_HEADLESS_SERVICE isEqualToString:call.method]) {
+        result(nil);
+    } else if([METHOD_PENDING_NOTIFICATIONS_REQUESTS isEqualToString:call.method]) {
+        [self pendingNotificationRequests:result];
+    }
+    else {
+        result(FlutterMethodNotImplemented);
     }
 }
 
@@ -165,9 +168,9 @@ typedef NS_ENUM(NSInteger, RepeatInterval) {
             authorizationOptions += UNAuthorizationOptionBadge;
         }
         [center requestAuthorizationWithOptions:(authorizationOptions) completionHandler:^(BOOL granted, NSError * _Nullable error) {
-            if(self->launchPayload != nil) {
-                [self handleSelectNotification:self->launchPayload];
-            }
+            [self didInitialized];
+            [self handleDeviceToken];
+            [self handleLaunchNotification];
             result(@(granted));
         }];
     } else {
@@ -183,12 +186,45 @@ typedef NS_ENUM(NSInteger, RepeatInterval) {
         }
         UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes:notificationTypes categories:nil];
         [[UIApplication sharedApplication] registerUserNotificationSettings:settings];
-        if(launchNotification != nil) {
-            NSString *payload = launchNotification.userInfo[PAYLOAD];
-            [self handleSelectNotification:payload];
-        }
+        [self didInitialized];
+        [self handleDeviceToken];
+        [self handleLaunchNotification];
         result(@YES);
     }
+}
+
+- (void)pendingNotificationRequests:(FlutterResult _Nonnull)result {
+    if(@available(iOS 10.0, *)) {
+        UNUserNotificationCenter *center =  [UNUserNotificationCenter currentNotificationCenter];
+        [center getPendingNotificationRequestsWithCompletionHandler:^(NSArray<UNNotificationRequest *> * _Nonnull requests) {
+            NSMutableArray<NSDictionary<NSString *, NSObject *> *> *pendingNotificationRequests = [[NSMutableArray alloc] initWithCapacity:[requests count]];
+            for (UNNotificationRequest *request in requests) {
+                [pendingNotificationRequests addObject:@{
+                                                         @"id" : request.content.userInfo[NOTIFICATION_ID],
+                                                         @"title" : request.content.title,
+                                                         @"body" : request.content.body,
+                                                         @"payload": request.content.userInfo[PAYLOAD]
+                                                         }];
+            }
+            result(pendingNotificationRequests);
+        }];
+    } else {
+        NSArray *notifications = [UIApplication sharedApplication].scheduledLocalNotifications;
+        NSMutableArray<NSDictionary<NSString *, NSObject *> *> *pendingNotificationRequests = [[NSMutableArray alloc] initWithCapacity:[notifications count]];
+        for( int i = 0; i < [notifications count]; i++) {
+            UILocalNotification* localNotification = [notifications objectAtIndex:i];
+            [pendingNotificationRequests addObject:@{
+                                                     @"id" : localNotification.userInfo[NOTIFICATION_ID],
+                                                     @"title" : localNotification.userInfo[TITLE],
+                                                     @"body" : localNotification.alertBody,
+                                                     @"payload": localNotification.userInfo[PAYLOAD]
+                                                     }];
+        }
+        result(pendingNotificationRequests);
+    }
+}
+
+- (void)didInitialized{
     initialized = true;
 }
 
@@ -215,9 +251,9 @@ typedef NS_ENUM(NSInteger, RepeatInterval) {
         }
         notificationDetails.sound = platformSpecifics[SOUND];
     }
-    if([SCHEDULE_METHOD isEqualToString:call.method]) {
+    if([METHOD_SCHEDULE isEqualToString:call.method]) {
         notificationDetails.secondsSinceEpoch = @([call.arguments[MILLISECONDS_SINCE_EPOCH] longLongValue] / 1000);
-    } else if([PERIODICALLY_SHOW_METHOD isEqualToString:call.method] || [SHOW_DAILY_AT_TIME_METHOD isEqualToString:call.method] || [SHOW_WEEKLY_AT_DAY_AND_TIME_METHOD isEqualToString:call.method]) {
+    } else if([METHOD_PERIODICALLY_SHOW isEqualToString:call.method] || [METHOD_SHOW_DAILY_AT_TIME isEqualToString:call.method] || [METHOD_SHOW_WEEKLY_AT_DAY_AND_TIME isEqualToString:call.method]) {
         if (call.arguments[REPEAT_TIME]) {
             NSDictionary *timeArguments = (NSDictionary *) call.arguments[REPEAT_TIME];
             notificationDetails.repeatTime = [[NotificationTime alloc] init];
@@ -276,34 +312,6 @@ typedef NS_ENUM(NSInteger, RepeatInterval) {
     result(nil);
 }
 
-- (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
-    if([INITIALIZE_METHOD isEqualToString:call.method]) {
-        [self initialize:call result:result];
-    } else if ([SHOW_METHOD isEqualToString:call.method] || [SCHEDULE_METHOD isEqualToString:call.method] || [PERIODICALLY_SHOW_METHOD isEqualToString:call.method] || [SHOW_DAILY_AT_TIME_METHOD isEqualToString:call.method]
-               || [SHOW_WEEKLY_AT_DAY_AND_TIME_METHOD isEqualToString:call.method]) {
-        [self showNotification:call result:result];
-    } else if([CANCEL_METHOD isEqualToString:call.method]) {
-        [self cancelNotification:call result:result];
-    } else if([CANCEL_ALL_METHOD isEqualToString:call.method]) {
-        [self cancelAllNotifications:result];
-    } else if([GET_NOTIFICATION_APP_LAUNCH_DETAILS_METHOD isEqualToString:call.method]) {
-        NSString *payload;
-        if(launchNotification != nil) {
-            payload = launchNotification.userInfo[PAYLOAD];
-        } else {
-            payload = launchPayload;
-        }
-        NSDictionary *notificationAppLaunchDetails = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:launchingAppFromNotification], NOTIFICATION_LAUNCHED_APP, payload, PAYLOAD, nil];
-        result(notificationAppLaunchDetails);
-    } else if([INITIALIZED_HEADLESS_SERVICE_METHOD isEqualToString:call.method]) {
-        result(nil);
-    } else if([PENDING_NOTIFICATIONS_REQUESTS_METHOD isEqualToString:call.method]) {
-        [self pendingNotificationRequests:result];
-    }
-    else {
-        result(FlutterMethodNotImplemented);
-    }
-}
 
 - (NSDictionary*)buildUserDict:(NSNumber *)id title:(NSString *)title presentAlert:(bool)presentAlert presentSound:(bool)presentSound presentBadge:(bool)presentBadge payload:(NSString *)payload {
     NSDictionary *userDict =[NSDictionary dictionaryWithObjectsAndKeys:id, NOTIFICATION_ID, title, TITLE, [NSNumber numberWithBool:presentAlert], PRESENT_ALERT, [NSNumber numberWithBool:presentSound], PRESENT_SOUND, [NSNumber numberWithBool:presentBadge], PRESENT_BADGE, payload, PAYLOAD, nil];
@@ -443,7 +451,103 @@ typedef NS_ENUM(NSInteger, RepeatInterval) {
 }
 
 
-- (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification :(UNNotification *)notification withCompletionHandler :(void (^)(UNNotificationPresentationOptions))completionHandler NS_AVAILABLE_IOS(10.0) {
+- (void)handleSelectNotification:(NSString *)payload {
+    [_channel invokeMethod:@"selectNotification" arguments:payload];
+}
+
+- (void)handleLaunchNotification{
+    if(launchNotification == nil) return;
+    [_channel invokeMethod:CALLBACK_ON_LAUNCH_RECEIVE_NOTIFICATION arguments:@{@"notification": [launchNotification copy]}];
+}
+
+- (void)handleNotification:(NSDictionary *)notification{
+    if(notification == nil) return;
+    if(resumingFromBackground){
+        [_channel invokeMethod:CALLBACK_ON_RESUME_RECEIVE_NOTIFICATION arguments:@{@"notification": notification}];
+    }else{
+        [_channel invokeMethod:CALLBACK_ON_ACTIVE_RECEIVE_NOTIFICATION arguments:@{@"notification": notification}];
+    }
+}
+
+- (void)handleDeviceToken{
+    if(deviceToken != nil && initialized){
+        [_channel invokeMethod:@"onToken" arguments:deviceToken];
+    }
+}
+
+#pragma mark - UIApplicationDelegate
+- (void)applicationDidEnterBackground:(UIApplication *)application {
+    resumingFromBackground = YES;
+}
+
+- (void)applicationDidBecomeActive:(UIApplication *)application {
+    resumingFromBackground = NO;
+    // Clears push notifications from the notification center, with the
+    // side effect of resetting the badge count. We need to clear notifications
+    // because otherwise the user could tap notifications in the notification
+    // center while the app is in the foreground, and we wouldn't be able to
+    // distinguish that case from the case where a message came in and the
+    // user dismissed the notification center without tapping anything.
+    // TODO(goderbauer): Revisit this behavior once we provide an API for managing
+    // the badge number, or if we add support for running Dart in the background.
+    // Setting badgeNumber to 0 is a no-op (= notifications will not be cleared)
+    // if it is already 0,
+    // therefore the next line is setting it to 1 first before clearing it again
+    // to remove all
+    // notifications.
+    application.applicationIconBadgeNumber = 1;
+    application.applicationIconBadgeNumber = 0;
+}
+
+- (BOOL)application:(UIApplication *)application
+didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+    if (launchOptions != nil) {
+        UILocalNotification *notification = (UILocalNotification *)[launchOptions objectForKey:UIApplicationLaunchOptionsLocalNotificationKey];
+        launchNotification = notification.userInfo;
+    }
+    
+    return YES;
+}
+
+- (void)application:(UIApplication*)application
+didReceiveLocalNotification:(UILocalNotification*)notification {
+    if(@available(iOS 10.0, *)) {
+        return;
+    }
+    
+    [self handleNotification:notification.userInfo];
+}
+
+- (BOOL)application:(UIApplication*)application
+didReceiveRemoteNotification:(NSDictionary*)userInfo
+fetchCompletionHandler:(void (^)(UIBackgroundFetchResult result))completionHandler{
+    [self handleNotification:userInfo];
+    completionHandler(UIBackgroundFetchResultNoData);
+    return YES;
+}
+
+- (void)application:(UIApplication *)application didRegisterUserNotificationSettings:(UIUserNotificationSettings *)notificationSettings {
+    NSDictionary *settingsDictionary = @{
+                                         @"sound" : [NSNumber numberWithBool:notificationSettings.types & UIUserNotificationTypeSound],
+                                         @"badge" : [NSNumber numberWithBool:notificationSettings.types & UIUserNotificationTypeBadge],
+                                         @"alert" : [NSNumber numberWithBool:notificationSettings.types & UIUserNotificationTypeAlert],
+                                         };
+    [_channel invokeMethod:@"onIosSettingsRegistered" arguments:settingsDictionary];
+}
+
+- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
+    NSString *token = [NSString stringWithFormat:@"%@", deviceToken];
+    token = [token stringByReplacingOccurrencesOfString:@" " withString:@""];
+    token = [token stringByReplacingOccurrencesOfString:@"<" withString:@""];
+    token = [token stringByReplacingOccurrencesOfString:@">" withString:@""];
+    self->deviceToken = token;
+    [self handleDeviceToken];
+    NSLog(@"========== device token ==========\n%@", token);
+}
+
+#pragma mark - @protocol UNUserNotificationCenterDelegate <NSObject>
+
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler NS_AVAILABLE_IOS(10.0){
     UNNotificationPresentationOptions presentationOptions = 0;
     NSNumber *presentAlertValue = (NSNumber*)notification.request.content.userInfo[PRESENT_ALERT];
     NSNumber *presentSoundValue = (NSNumber*)notification.request.content.userInfo[PRESENT_SOUND];
@@ -463,45 +567,19 @@ typedef NS_ENUM(NSInteger, RepeatInterval) {
         presentationOptions |= UNNotificationPresentationOptionBadge;
     }
     
-
     completionHandler(presentationOptions);
 }
 
-- (void)handleSelectNotification:(NSString *)payload {
-    [_channel invokeMethod:@"selectNotification" arguments:payload];
-}
-
-- (void)userNotificationCenter:(UNUserNotificationCenter *)center
-didReceiveNotificationResponse:(UNNotificationResponse *)response
-         withCompletionHandler:(void (^)(void))completionHandler NS_AVAILABLE_IOS(10.0) {
+// The method will be called on the delegate when the user responded to the notification by opening the application, dismissing the notification or choosing a UNNotificationAction. The delegate must be set before the application returns from application:didFinishLaunchingWithOptions:.
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void(^)(void))completionHandler NS_AVAILABLE_IOS(10.0) {
     if ([response.actionIdentifier isEqualToString:UNNotificationDefaultActionIdentifier]) {
-        NSString *payload = (NSString *) response.notification.request.content.userInfo[PAYLOAD];
+        NSDictionary *notification = response.notification.request.content.userInfo;
+        launchNotification = notification;
         if(initialized) {
-            [self handleSelectNotification:payload];
-        } else {
-            launchPayload = payload;
-            launchingAppFromNotification = true;
+            [self handleLaunchNotification];
         }
     }
 }
-- (BOOL)application:(UIApplication *)application
-didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    if (launchOptions != nil) {
-        launchNotification = (UILocalNotification *)[launchOptions objectForKey:UIApplicationLaunchOptionsLocalNotificationKey];
-        launchingAppFromNotification = launchNotification != nil;
-    }
-    
-    return YES;
-}
 
-- (void)application:(UIApplication*)application
-didReceiveLocalNotification:(UILocalNotification*)notification {
-    if(@available(iOS 10.0, *)) {
-        return;
-    }
-
-    NSDictionary *arguments = [NSDictionary dictionaryWithObjectsAndKeys:notification.userInfo[NOTIFICATION_ID], ID,notification.userInfo[TITLE], TITLE,notification.alertBody, BODY,  notification.userInfo[PAYLOAD], PAYLOAD, nil];
-    [_channel invokeMethod:DID_RECEIVE_LOCAL_NOTIFICATION arguments:arguments];
-}
 
 @end

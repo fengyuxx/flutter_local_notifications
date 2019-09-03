@@ -29,6 +29,7 @@ void main() async {
 class PaddedRaisedButton extends StatelessWidget {
   final String buttonText;
   final VoidCallback onPressed;
+
   const PaddedRaisedButton(
       {@required this.buttonText, @required this.onPressed});
 
@@ -59,8 +60,12 @@ class _HomePageState extends State<HomePage> {
         onDidReceiveLocalNotification: onDidReceiveLocalNotification);
     var initializationSettings = InitializationSettings(
         initializationSettingsAndroid, initializationSettingsIOS);
-    flutterLocalNotificationsPlugin.initialize(initializationSettings,
-        onSelectNotification: onSelectNotification);
+    flutterLocalNotificationsPlugin.initialize(initializationSettings);
+    flutterLocalNotificationsPlugin.setReceiveNotificationCallback(
+      onLaunch: _onLaunchReceiveNotification,
+      onResume: _onResumeReceiveNotification,
+      onActive: _onActiveReceiveNotification,
+    );
   }
 
   @override
@@ -684,43 +689,55 @@ class _HomePageState extends State<HomePage> {
     return value.toString().padLeft(2, '0');
   }
 
+  _onLaunchReceiveNotification(
+      Map<String, dynamic> map, ReceiveNotificationType tpe) async {}
+
+  _onResumeReceiveNotification(
+      Map<String, dynamic> map, ReceiveNotificationType tpe) async {}
+
+  _onActiveReceiveNotification(
+      Map<String, dynamic> map, ReceiveNotificationType tpe) async {}
+
   Future<void> onDidReceiveLocalNotification(
       int id, String title, String body, String payload) async {
     // display a dialog with the notification details, tap ok to go to another page
     await showDialog(
       context: context,
       builder: (BuildContext context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            child: Text('Ok'),
-            onPressed: () async {
-              Navigator.of(context, rootNavigator: true).pop();
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SecondScreen(payload),
-                ),
-              );
-            },
-          )
-        ],
-      ),
+            title: Text(title),
+            content: Text(body),
+            actions: [
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                child: Text('Ok'),
+                onPressed: () async {
+                  Navigator.of(context, rootNavigator: true).pop();
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SecondScreen(payload),
+                    ),
+                  );
+                },
+              )
+            ],
+          ),
     );
   }
 }
 
 class SecondScreen extends StatefulWidget {
   final String payload;
+
   SecondScreen(this.payload);
+
   @override
   State<StatefulWidget> createState() => SecondScreenState();
 }
 
 class SecondScreenState extends State<SecondScreen> {
   String _payload;
+
   @override
   void initState() {
     super.initState();
