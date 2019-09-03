@@ -548,25 +548,19 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult result))completionHandl
 #pragma mark - @protocol UNUserNotificationCenterDelegate <NSObject>
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler NS_AVAILABLE_IOS(10.0){
+    NSDictionary *userInfo = notification.request.content.userInfo;
     UNNotificationPresentationOptions presentationOptions = 0;
-    NSNumber *presentAlertValue = (NSNumber*)notification.request.content.userInfo[PRESENT_ALERT];
-    NSNumber *presentSoundValue = (NSNumber*)notification.request.content.userInfo[PRESENT_SOUND];
-    NSNumber *presentBadgeValue = (NSNumber*)notification.request.content.userInfo[PRESENT_BADGE];
-    bool presentAlert = [presentAlertValue boolValue];
-    bool presentSound = [presentSoundValue boolValue];
-    bool presentBadge = [presentBadgeValue boolValue];
-    if(presentAlert) {
-        presentationOptions |= UNNotificationPresentationOptionAlert;
+    if([userInfo[@"_classified"] isEqualToString:NOTIFICATION_CLASSIFIED]){
+        NSNumber *presentAlertValue = (NSNumber *)userInfo[PRESENT_ALERT];
+        NSNumber *presentSoundValue = (NSNumber *)userInfo[PRESENT_SOUND];
+        NSNumber *presentBadgeValue = (NSNumber *)userInfo[PRESENT_BADGE];
+        if([presentAlertValue boolValue]) presentationOptions |= UNNotificationPresentationOptionAlert;
+        if([presentSoundValue boolValue]) presentationOptions |= UNNotificationPresentationOptionSound;
+        if([presentBadgeValue boolValue]) presentationOptions |= UNNotificationPresentationOptionBadge;
+
+    }else{
+        UNNotificationPresentationOptions presentationOptions = UNNotificationPresentationOptionBadge | UNNotificationPresentationOptionSound | UNNotificationPresentationOptionAlert;
     }
-    
-    if(presentSound){
-        presentationOptions |= UNNotificationPresentationOptionSound;
-    }
-    
-    if(presentBadge) {
-        presentationOptions |= UNNotificationPresentationOptionBadge;
-    }
-    
     completionHandler(presentationOptions);
 }
 
