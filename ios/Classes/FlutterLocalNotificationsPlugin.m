@@ -500,28 +500,20 @@ typedef NS_ENUM(NSInteger, RepeatInterval) {
     application.applicationIconBadgeNumber = 0;
 }
 
-- (BOOL)application:(UIApplication *)application
-didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     if (launchOptions != nil) {
         UILocalNotification *notification = (UILocalNotification *)[launchOptions objectForKey:UIApplicationLaunchOptionsLocalNotificationKey];
         launchNotification = notification.userInfo;
     }
-    
     return YES;
 }
 
-- (void)application:(UIApplication*)application
-didReceiveLocalNotification:(UILocalNotification*)notification {
-    if(@available(iOS 10.0, *)) {
-        return;
-    }
-    
+- (void)application:(UIApplication*)application didReceiveLocalNotification:(UILocalNotification*)notification {
+    if(@available(iOS 10.0, *)) return;
     [self handleNotification:notification.userInfo];
 }
 
-- (BOOL)application:(UIApplication*)application
-didReceiveRemoteNotification:(NSDictionary*)userInfo
-fetchCompletionHandler:(void (^)(UIBackgroundFetchResult result))completionHandler{
+- (BOOL)application:(UIApplication*)application didReceiveRemoteNotification:(NSDictionary*)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult result))completionHandler{
     [self handleNotification:userInfo];
     completionHandler(UIBackgroundFetchResultNoData);
     return YES;
@@ -558,20 +550,21 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult result))completionHandl
         if([presentAlertValue boolValue]) presentationOptions |= UNNotificationPresentationOptionAlert;
         if([presentSoundValue boolValue]) presentationOptions |= UNNotificationPresentationOptionSound;
         if([presentBadgeValue boolValue]) presentationOptions |= UNNotificationPresentationOptionBadge;
-
+        completionHandler(presentationOptions);
     }else{
-        presentationOptions = UNNotificationPresentationOptionBadge | UNNotificationPresentationOptionSound | UNNotificationPresentationOptionAlert;
+        completionHandler(presentationOptions);
     }
-    completionHandler(presentationOptions);
+    [self handleNotification:userInfo];
 }
 
 // The method will be called on the delegate when the user responded to the notification by opening the application, dismissing the notification or choosing a UNNotificationAction. The delegate must be set before the application returns from application:didFinishLaunchingWithOptions:.
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void(^)(void))completionHandler NS_AVAILABLE_IOS(10.0) {
     if ([response.actionIdentifier isEqualToString:UNNotificationDefaultActionIdentifier]) {
         NSDictionary *notification = response.notification.request.content.userInfo;
-        launchNotification = notification;
         if(initialized) {
-            [self handleLaunchNotification];
+            [self handleNotification:notification];
+        }else{
+            launchNotification = notification;
         }
     }
 }
