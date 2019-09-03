@@ -60,8 +60,8 @@ class _HomePageState extends State<HomePage> {
         onDidReceiveLocalNotification: onDidReceiveLocalNotification);
     var initializationSettings = InitializationSettings(
         initializationSettingsAndroid, initializationSettingsIOS);
-    flutterLocalNotificationsPlugin.initialize(initializationSettings);
-    flutterLocalNotificationsPlugin.setReceiveNotificationCallback(
+    flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
       onLaunch: _onLaunchReceiveNotification,
       onResume: _onResumeReceiveNotification,
       onActive: _onActiveReceiveNotification,

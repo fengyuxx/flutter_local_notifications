@@ -93,29 +93,22 @@ class FlutterLocalNotificationsPlugin {
   NotificationHandler _onResumeReceiveNotification;
 
   /// Initializes the plugin. Call this method on application before using the plugin further
-  Future<bool> initialize(InitializationSettings initializationSettings) async {
+  Future<bool> initialize(
+    InitializationSettings initializationSettings, {
+    NotificationHandler onLaunch,
+    NotificationHandler onResume,
+    NotificationHandler onActive,
+  }) async {
     var serializedPlatformSpecifics =
         _retrievePlatformSpecificInitializationSettings(initializationSettings);
     _channel.setMethodCallHandler(_handleMethod);
-    /*final CallbackHandle callback =
-        PluginUtilities.getCallbackHandle(_callbackDispatcher);
-    serializedPlatformSpecifics['callbackDispatcher'] = callback.toRawHandle();
-    if (onShowNotification != null) {
-      serializedPlatformSpecifics['onNotificationCallbackDispatcher'] =
-          PluginUtilities.getCallbackHandle(onShowNotification).toRawHandle();
-    }*/
-    var result =
-        await _channel.invokeMethod('initialize', serializedPlatformSpecifics);
-    return result;
-  }
 
-  setReceiveNotificationCallback(
-      {NotificationHandler onLaunch,
-      NotificationHandler onResume,
-      NotificationHandler onActive}) {
     _onLaunchReceiveNotification = onLaunch;
     _onActiveReceiveNotification = onActive;
     _onResumeReceiveNotification = onResume;
+    var result =
+        await _channel.invokeMethod('initialize', serializedPlatformSpecifics);
+    return result;
   }
 
   Future<NotificationAppLaunchDetails> getNotificationAppLaunchDetails() async {
